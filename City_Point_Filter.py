@@ -76,7 +76,6 @@ class CityPointFilter:
 
         attended_df = attended_df[[self.customer_ref_column]].drop_duplicates()
 
-        attended_df.columns = ["Cust. Ref."]
         attended_df = attended_df.reset_index(drop=True)
 
         return attended_df
@@ -88,7 +87,7 @@ class CityPointFilter:
 
         if total_rows == 0:
             output_path = self.output_folder / f"{self.output_file_prefix}_1.csv"
-            df.to_csv(output_path, index=False, encoding="utf-8")
+            df.to_csv(output_path, index=False, header=False, encoding="utf-8")
             print(f"CSV created: {output_path}")
             return
 
@@ -105,7 +104,12 @@ class CityPointFilter:
                 f"{self.output_file_prefix}_{file_number + 1}.csv"
             )
 
-            chunk_df.to_csv(output_path, index=False, encoding="utf-8")
+            chunk_df.to_csv(
+                output_path,
+                index=False,
+                header=False,
+                encoding="utf-8"
+            )
 
             print(
                 f"CSV created: {output_path} "
