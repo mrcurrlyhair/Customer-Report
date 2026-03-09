@@ -1,5 +1,6 @@
-import sys
+import shutil
 import subprocess
+import sys
 import threading
 from pathlib import Path
 import tkinter as tk
@@ -22,7 +23,11 @@ class CustomerReportApp(tk.Tk):
         self.geometry("900x650")
         self.minsize(820, 560)
 
-        self.repo_root = Path(__file__).resolve().parent
+        if getattr(sys, "frozen", False):
+            self.repo_root = Path(sys.executable).resolve().parent
+        else:
+            self.repo_root = Path(__file__).resolve().parent
+
         self.is_running = False
 
         self._ensure_folders_exist()
@@ -32,6 +37,22 @@ class CustomerReportApp(tk.Tk):
     def _ensure_folders_exist(self):
         for folder in FOLDERS:
             (self.repo_root / folder).mkdir(parents=True, exist_ok=True)
+
+    def _find_python_executable(self):
+        if not getattr(sys, "frozen", False):
+            return sys.executable
+
+        candidates = [
+            shutil.which("py"),
+            shutil.which("python"),
+            shutil.which("python3"),
+        ]
+
+        for candidate in candidates:
+            if candidate:
+                return candidate
+
+        return None
 
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
@@ -180,7 +201,6 @@ class CustomerReportApp(tk.Tk):
     def _set_running_state(self, running):
         self.is_running = running
         state = "disabled" if running else "normal"
-
         self.btn_compare_all.configure(state=state)
         self.btn_compare_recent.configure(state=state)
         self.btn_city_points.configure(state=state)
@@ -217,6 +237,15 @@ class CustomerReportApp(tk.Tk):
             )
             return None
 
+        python_executable = self._find_python_executable()
+        if python_executable is None:
+            messagebox.showerror(
+                "Python Not Found",
+                "Could not find a Python interpreter to run the scripts.\n"
+                "Please install Python or make sure 'py' or 'python' is available."
+            )
+            return None
+
         if action_key in {"compare_all", "compare_recent"}:
             folder = self.repo_root / "Reports_Import"
             if not folder.exists():
@@ -235,24 +264,26 @@ class CustomerReportApp(tk.Tk):
                 )
                 return None
 
-        return script_path
+        return script_path, python_executable
 
     def _run_script(self, action_key):
         if self.is_running:
             return
 
-        script_path = self._validate_before_run(action_key)
-        if script_path is None:
+        validated = self._validate_before_run(action_key)
+        if validated is None:
             return
+
+        script_path, python_executable = validated
 
         thread = threading.Thread(
             target=self._run_script_worker,
-            args=(action_key, script_path),
+            args=(action_key, script_path, python_executable),
             daemon=True
         )
         thread.start()
 
-    def _run_script_worker(self, action_key, script_path):
+    def _run_script_worker(self, action_key, script_path, python_executable):
         action_names = {
             "compare_all": "Compare All Games",
             "compare_recent": "Compare Two Most Recent Games",
@@ -265,13 +296,21 @@ class CustomerReportApp(tk.Tk):
         self.after(
             0,
             lambda: self._append_log(
-                f"\n{'=' * 70}\nRunning {action_name}\nScript: {script_path.name}\n{'=' * 70}\n"
+                f"\n{'=' * 70}\nRunning {action_name}\n"
+                f"Script: {script_path.name}\n"
+                f"Python: {python_executable}\n"
+                f"{'=' * 70}\n"
             )
         )
 
         try:
+            if Path(python_executable).name.lower() == "py.exe" or Path(python_executable).name.lower() == "py":
+                command = [python_executable, str(script_path)]
+            else:
+                command = [python_executable, str(script_path)]
+
             process = subprocess.Popen(
-                [sys.executable, str(script_path)],
+                command,
                 cwd=str(self.repo_root),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -289,9 +328,7 @@ class CustomerReportApp(tk.Tk):
             if return_code == 0:
                 self.after(
                     0,
-                    lambda: self._append_log(
-                        f"\nFinished successfully: {action_name}\n"
-                    )
+                    lambda: self._append_log(f"\nFinished successfully: {action_name}\n")
                 )
                 self.after(
                     0,
