@@ -1,4 +1,3 @@
-import os
 import sys
 import subprocess
 import threading
@@ -13,7 +12,7 @@ SCRIPT_NAMES = {
     "compare_recent": "Customer_Attend_Recent.py",
     "city_points": "City_Point_Filter.py",
 }
-FOLDERS = ["Reports_Import", "Reports_Output", "City_Points"]
+FOLDERS = ["Reports_Import", "City_Points", "Reports_Output"]
 
 
 class CustomerReportApp(tk.Tk):
@@ -26,8 +25,13 @@ class CustomerReportApp(tk.Tk):
         self.repo_root = Path(__file__).resolve().parent
         self.is_running = False
 
+        self._ensure_folders_exist()
         self._build_ui()
         self._refresh_status()
+
+    def _ensure_folders_exist(self):
+        for folder in FOLDERS:
+            (self.repo_root / folder).mkdir(parents=True, exist_ok=True)
 
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
@@ -48,7 +52,8 @@ class CustomerReportApp(tk.Tk):
             header,
             text=(
                 "Run your attendance and City Points scripts from one place. "
-                "All scripts are expected to be in the same folder as this app."
+                "All scripts are expected to be in the same folder as this app. "
+                "The app automatically creates Reports_Import, City_Points, and Reports_Output if they do not exist."
             ),
             wraplength=760,
         )
@@ -90,13 +95,25 @@ class CustomerReportApp(tk.Tk):
 
         self.status_labels = {}
         for idx, folder in enumerate(FOLDERS):
-            ttk.Label(status_box, text=f"{folder}:").grid(row=idx, column=0, sticky="w", padx=(0, 8), pady=2)
+            ttk.Label(
+                status_box,
+                text=f"{folder}:"
+            ).grid(row=idx, column=0, sticky="w", padx=(0, 8), pady=2)
+
             lbl = ttk.Label(status_box, text="Checking...")
             lbl.grid(row=idx, column=1, sticky="w", pady=2)
             self.status_labels[folder] = lbl
 
-        ttk.Label(status_box, text="Scripts:").grid(row=len(FOLDERS), column=0, sticky="nw", padx=(0, 8), pady=(8, 2))
-        self.scripts_status = ttk.Label(status_box, text="Checking...", justify="left")
+        ttk.Label(
+            status_box,
+            text="Scripts:"
+        ).grid(row=len(FOLDERS), column=0, sticky="nw", padx=(0, 8), pady=(8, 2))
+
+        self.scripts_status = ttk.Label(
+            status_box,
+            text="Checking...",
+            justify="left"
+        )
         self.scripts_status.grid(row=len(FOLDERS), column=1, sticky="w", pady=(8, 2))
 
         controls = ttk.Frame(self, padding=(16, 0, 16, 8))
@@ -109,10 +126,17 @@ class CustomerReportApp(tk.Tk):
         info_bar.columnconfigure(0, weight=1)
 
         self.current_action_var = tk.StringVar(value="Ready")
-        self.current_action_label = ttk.Label(info_bar, textvariable=self.current_action_var)
+        self.current_action_label = ttk.Label(
+            info_bar,
+            textvariable=self.current_action_var
+        )
         self.current_action_label.grid(row=0, column=0, sticky="w")
 
-        self.refresh_button = ttk.Button(info_bar, text="Refresh Status", command=self._refresh_status)
+        self.refresh_button = ttk.Button(
+            info_bar,
+            text="Refresh Status",
+            command=self._refresh_status
+        )
         self.refresh_button.grid(row=0, column=1, sticky="e")
 
         log_frame = ttk.LabelFrame(controls, text="Output Log", padding=10)
@@ -120,10 +144,19 @@ class CustomerReportApp(tk.Tk):
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
 
-        self.log_text = tk.Text(log_frame, wrap="word", height=18, font=("Consolas", 10))
+        self.log_text = tk.Text(
+            log_frame,
+            wrap="word",
+            height=18,
+            font=("Consolas", 10)
+        )
         self.log_text.grid(row=0, column=0, sticky="nsew")
 
-        scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        scrollbar = ttk.Scrollbar(
+            log_frame,
+            orient="vertical",
+            command=self.log_text.yview
+        )
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text.configure(yscrollcommand=scrollbar.set)
 
@@ -147,6 +180,7 @@ class CustomerReportApp(tk.Tk):
     def _set_running_state(self, running):
         self.is_running = running
         state = "disabled" if running else "normal"
+
         self.btn_compare_all.configure(state=state)
         self.btn_compare_recent.configure(state=state)
         self.btn_city_points.configure(state=state)
@@ -155,35 +189,50 @@ class CustomerReportApp(tk.Tk):
     def _refresh_status(self):
         for folder in FOLDERS:
             path = self.repo_root / folder
+
             if path.exists() and path.is_dir():
                 file_count = len(list(path.iterdir()))
-                self.status_labels[folder].configure(text=f"Found ({file_count} item(s))")
+                self.status_labels[folder].configure(
+                    text=f"Found ({file_count} item(s))"
+                )
             else:
                 self.status_labels[folder].configure(text="Missing")
 
         lines = []
-        for key, script_name in SCRIPT_NAMES.items():
+        for _, script_name in SCRIPT_NAMES.items():
             script_path = self.repo_root / script_name
             status = "Found" if script_path.exists() else "Missing"
             lines.append(f"{script_name}: {status}")
+
         self.scripts_status.configure(text="\n".join(lines))
 
     def _validate_before_run(self, action_key):
         script_name = SCRIPT_NAMES[action_key]
         script_path = self.repo_root / script_name
+
         if not script_path.exists():
-            messagebox.showerror("Missing Script", f"Could not find {script_name} in:\n{self.repo_root}")
+            messagebox.showerror(
+                "Missing Script",
+                f"Could not find {script_name} in:\n{self.repo_root}"
+            )
             return None
 
         if action_key in {"compare_all", "compare_recent"}:
             folder = self.repo_root / "Reports_Import"
             if not folder.exists():
-                messagebox.showerror("Missing Folder", f"Missing folder:\n{folder}")
+                messagebox.showerror(
+                    "Missing Folder",
+                    f"Missing folder:\n{folder}"
+                )
                 return None
+
         elif action_key == "city_points":
             folder = self.repo_root / "City_Points"
             if not folder.exists():
-                messagebox.showerror("Missing Folder", f"Missing folder:\n{folder}")
+                messagebox.showerror(
+                    "Missing Folder",
+                    f"Missing folder:\n{folder}"
+                )
                 return None
 
         return script_path
@@ -196,7 +245,11 @@ class CustomerReportApp(tk.Tk):
         if script_path is None:
             return
 
-        thread = threading.Thread(target=self._run_script_worker, args=(action_key, script_path), daemon=True)
+        thread = threading.Thread(
+            target=self._run_script_worker,
+            args=(action_key, script_path),
+            daemon=True
+        )
         thread.start()
 
     def _run_script_worker(self, action_key, script_path):
@@ -209,7 +262,12 @@ class CustomerReportApp(tk.Tk):
 
         self.after(0, lambda: self._set_running_state(True))
         self.after(0, lambda: self.current_action_var.set(f"Running: {action_name}"))
-        self.after(0, lambda: self._append_log(f"\n{'=' * 70}\nRunning {action_name}\nScript: {script_path.name}\n{'=' * 70}\n"))
+        self.after(
+            0,
+            lambda: self._append_log(
+                f"\n{'=' * 70}\nRunning {action_name}\nScript: {script_path.name}\n{'=' * 70}\n"
+            )
+        )
 
         try:
             process = subprocess.Popen(
@@ -229,16 +287,40 @@ class CustomerReportApp(tk.Tk):
             return_code = process.wait()
 
             if return_code == 0:
-                self.after(0, lambda: self._append_log(f"\nFinished successfully: {action_name}\n"))
-                self.after(0, lambda: self.current_action_var.set(f"Finished: {action_name}"))
+                self.after(
+                    0,
+                    lambda: self._append_log(
+                        f"\nFinished successfully: {action_name}\n"
+                    )
+                )
+                self.after(
+                    0,
+                    lambda: self.current_action_var.set(f"Finished: {action_name}")
+                )
             else:
-                self.after(0, lambda: self._append_log(f"\nFailed with exit code {return_code}: {action_name}\n"))
-                self.after(0, lambda: self.current_action_var.set(f"Failed: {action_name}"))
-                self.after(0, lambda: messagebox.showerror("Script Failed", f"{action_name} failed. Check the output log for details."))
+                self.after(
+                    0,
+                    lambda: self._append_log(
+                        f"\nFailed with exit code {return_code}: {action_name}\n"
+                    )
+                )
+                self.after(
+                    0,
+                    lambda: self.current_action_var.set(f"Failed: {action_name}")
+                )
+                self.after(
+                    0,
+                    lambda: messagebox.showerror(
+                        "Script Failed",
+                        f"{action_name} failed. Check the output log for details."
+                    )
+                )
+
         except Exception as exc:
             self.after(0, lambda: self._append_log(f"\nError: {exc}\n"))
             self.after(0, lambda: self.current_action_var.set("Error"))
             self.after(0, lambda: messagebox.showerror("Error", str(exc)))
+
         finally:
             self.after(0, self._refresh_status)
             self.after(0, lambda: self._set_running_state(False))
